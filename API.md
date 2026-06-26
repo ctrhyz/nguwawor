@@ -2,7 +2,7 @@
 
 Tempik exposes a REST API for session management, inbox operations, and message retrieval. All endpoints live under `/api/`.
 
-**Base URL:** `https://YOUR_DOMAIN/api/`
+**Base URL:** `https://tempik.exse7en.fr/api/` (or any configured domain)
 
 ---
 
@@ -29,10 +29,18 @@ Returns the public app configuration.
 ```json
 {
   "appName": "Tempik",
-  "mailDomain": "example.com",
-  "webHost": "tempik.example.com"
+  "mailDomain": "exse7en.fr",
+  "mailDomains": ["exse7en.fr", "apimurah.my.id", "payin.my.id"],
+  "webHost": "tempik.exse7en.fr"
 }
 ```
+
+| Field | Type | Description |
+|---|---|---|
+| `appName` | string | App display name |
+| `mailDomain` | string | Default mail domain (first in the list, for backward compat) |
+| `mailDomains` | string[] | All available mail domains |
+| `webHost` | string | Web frontend hostname |
 
 ---
 
@@ -119,22 +127,30 @@ Creates a new inbox (or claims an existing one) and links it to your session.
 | Field | Required | Description |
 |---|---|---|
 | `localPart` | No | Custom username (e.g. `"myname"`). Omit for a random address. |
-| `domain` | No | Domain override. Defaults to the configured `MAIL_DOMAIN`. |
+| `domain` | No | Domain override. Must be one of the allowed domains from `GET /api/config`'s `mailDomains`. Defaults to the first configured domain. Invalid domains are rejected with `400`. |
 
 **Examples**
 
 ```json
-// Custom address
+// Custom address on default domain
 { "localPart": "myinbox" }
-// → myinbox@example.com
+// → myinbox@exse7en.fr
 
 // Random address
 {}
-// → langitbiru23@example.com
+// → langitbiru23@exse7en.fr
 
-// Custom domain
-{ "localPart": "test", "domain": "other.com" }
-// → test@other.com
+// Custom address on specific domain
+{ "localPart": "test", "domain": "apimurah.my.id" }
+// → test@apimurah.my.id
+
+// Random on specific domain
+{ "domain": "payin.my.id" }
+// → melatijaya87@payin.my.id
+
+// Invalid domain → 400
+{ "domain": "evil.com" }
+// → { "error": "Invalid domain: evil.com. Allowed: exse7en.fr, apimurah.my.id, payin.my.id" }
 ```
 
 **Response** `201 Created`
@@ -151,11 +167,12 @@ Creates a new inbox (or claims an existing one) and links it to your session.
 | Status | Message | Meaning |
 |---|---|---|
 | `400` | `Missing x-session-id` | No session header provided |
+| `400` | `Invalid domain: ...` | Requested domain is not in the allowed list. Check `GET /config`'s `mailDomains`. |
 
 **Notes**
 - If the address already exists, it simply links the existing inbox to your session
 - Random addresses are human-readable Indonesian-style (e.g. `kopihujan42`, `bulanbiru17`)
-- The generator ensures uniqueness — it never creates duplicates
+- The generator checks the actual database for uniqueness — it never creates duplicates, even across different sessions
 
 **Usage**
 
@@ -303,7 +320,7 @@ All error responses follow this format:
 
 | Status | When |
 |---|---|
-| `400` | Missing `x-session-id` header |
+| `400` | Missing `x-session-id` header, or invalid domain in POST `/api/inboxes` |
 | `403` | Unauthorized — inbox not linked to your session |
 | `404` | Route not found |
 

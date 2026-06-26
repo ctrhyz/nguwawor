@@ -7,6 +7,7 @@ const newBox = document.getElementById('newBox');
 const createCustomBtn = document.getElementById('createCustomBtn');
 const createRandomBtn = document.getElementById('createRandomBtn');
 const localPartInput = document.getElementById('localPartInput');
+const domainSelect = document.getElementById('domainSelect');
 const currentInbox = document.getElementById('currentInbox');
 const messageCount = document.getElementById('messageCount');
 const messageList = document.getElementById('messageList');
@@ -46,6 +47,17 @@ async function loadConfig() {
   appTitle.textContent = appConfig.appName;
   appSubtitle.textContent = `Disposable inbox for ${appConfig.mailDomain}`;
   localPartInput.placeholder = `username atau kosongkan untuk random @${appConfig.mailDomain}`;
+
+  // Populate domain selector
+  const domains = appConfig.mailDomains || [appConfig.mailDomain];
+  domainSelect.innerHTML = '';
+  domains.forEach((d) => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = `@${d}`;
+    domainSelect.appendChild(opt);
+  });
+  if (domains.length <= 1) domainSelect.style.display = 'none';
 }
 
 async function ensureSession() {
@@ -133,18 +145,20 @@ deleteBtn.addEventListener('click', async () => {
 
 createCustomBtn.addEventListener('click', async () => {
   const localPart = localPartInput.value.trim();
+  const domain = domainSelect.value;
   const inbox = await fetchJson('/api/inboxes', {
     method: 'POST',
-    body: JSON.stringify({ localPart })
+    body: JSON.stringify({ localPart, domain })
   });
   localPartInput.value = '';
   await loadInboxes(inbox.address);
 });
 
 createRandomBtn.addEventListener('click', async () => {
+  const domain = domainSelect.value;
   const inbox = await fetchJson('/api/inboxes', {
     method: 'POST',
-    body: JSON.stringify({})
+    body: JSON.stringify({ domain })
   });
   localPartInput.value = '';
   await loadInboxes(inbox.address);

@@ -20,6 +20,14 @@ export interface ApiEnv {
   WEB_HOST: string;
 }
 
+function getDomains(env: ApiEnv): string[] {
+  return env.MAIL_DOMAIN.split(',').map(d => d.trim()).filter(Boolean);
+}
+
+function defaultDomain(env: ApiEnv): string {
+  return getDomains(env)[0] || 'example.com';
+}
+
 function sessionId(c: any): string | null {
   return (c.req.header('x-session-id') || '').trim() || null;
 }
@@ -37,9 +45,11 @@ const api = new Hono<{ Bindings: ApiEnv }>();
 
 // ---- GET /api/config ----
 api.get('/config', (c) => {
+  const domains = getDomains(c.env);
   return c.json({
     appName: c.env.APP_NAME || 'Tempik',
-    mailDomain: c.env.MAIL_DOMAIN || 'example.com',
+    mailDomain: domains[0] || 'example.com',
+    mailDomains: domains,
     webHost: c.env.WEB_HOST || 'tempik.example.com',
   });
 });
@@ -69,18 +79,25 @@ api.post('/inboxes', async (c) => {
   if (!sid) return c.json({ error: 'Missing x-session-id' }, 400);
 
   const body = await c.req.json().catch(() => ({}));
-  const domain = body.domain || c.env.MAIL_DOMAIN || 'example.com';
+  const domains = getDomains(c.env);
+  const requestedDomain: string = (body.domain || '').trim().toLowerCase();
+  const domain = requestedDomain && domains.includes(requestedDomain)
+    ? requestedDomain
+    : defaultDomain(c.env);
+
+  // Validate: reject unknown domains
+  if (requestedDomain && !domains.includes(requestedDomain)) {
+    return c.json({ error: `Invalid domain: ${requestedDomain}. Allowed: ${domains.join(', ')}` }, 400);
+  }
+
   const requested: string = (body.localPart || '').trim().toLowerCase();
 
   let address: string;
   if (requested) {
     address = `${requested}@${domain}`;
   } else {
-    const dataInboxes = new Set(
-      (await getSessionInboxes(c.env.DB, sid)).map((i) => i.address)
-    );
-    address = generateUniqueAddress(
-      (addr) => dataInboxes.has(addr),
+    address = await generateUniqueAddress(
+      (addr) => inboxExists(c.env.DB, addr),
       domain
     );
   }
